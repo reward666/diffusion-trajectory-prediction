@@ -52,7 +52,12 @@ class TrajectoryNPZDataset:
         chunk_index = int(np.searchsorted(self.cumulative_lengths, index, side="right"))
         chunk_start = 0 if chunk_index == 0 else int(self.cumulative_lengths[chunk_index - 1])
         if chunk_index != self._cached_chunk_index:
-            self._cached_data = np.load(self.chunk_paths[chunk_index], allow_pickle=False)
+            with np.load(self.chunk_paths[chunk_index], allow_pickle=False) as data:
+                self._cached_data = {
+                    "past": data["past"],
+                    "future": data["future"],
+                    "meta": data["meta"],
+                }
             self._cached_chunk_index = chunk_index
         local_index = index - chunk_start
         return (

@@ -71,3 +71,30 @@ outputs/reports/diffusion_train_log.json
 
 To resume training, set `training.resume_from` in
 `configs/ngsim_diffusion.yaml` to a checkpoint path.
+
+## Evaluation And Static Visualization
+
+Evaluate the best checkpoint with six diffusion samples per trajectory:
+
+```bash
+python scripts/eval_diffusion.py \
+  --config configs/ngsim_diffusion.yaml \
+  --checkpoint outputs/checkpoints/diffusion_best.pt \
+  --num-samples 6
+```
+
+For a quick first check:
+
+```bash
+python scripts/eval_diffusion.py \
+  --max-trajectories 512 \
+  --num-samples 6 \
+  --num-plots 12
+```
+
+Outputs:
+
+```text
+outputs/reports/diffusion_test_metrics.json
+outputs/figures/diffusion_test/*.png
+```
