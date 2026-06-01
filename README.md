@@ -1,0 +1,73 @@
+# Vehicle Trajectory Diffusion
+
+Minimal NGSIM trajectory-prediction pipeline using a conditional DDPM model.
+
+## Server Setup
+
+Use Python 3.10 or 3.11. Install a CUDA-enabled PyTorch build that matches the
+server driver by following:
+
+```text
+https://pytorch.org/get-started/locally/
+```
+
+Then install the remaining dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+## Data Preparation
+
+Place NGSIM CSV files under:
+
+```text
+data/raw/ngsim
+```
+
+The CSV files may contain multiple locations. Samples remain isolated by
+`Location`, source file, and `Vehicle_ID`.
+
+Prepare and split the data. The current first-run setup uses only `us-101`
+and keeps every vehicle inside exactly one split:
+
+```bash
+python scripts/prepare_ngsim.py \
+  --raw-dir data/raw/ngsim \
+  --output-dir data/processed/ngsim_us101_v2 \
+  --location us-101 \
+  --stride 20 \
+  --chunk-size 10000
+
+python scripts/split_ngsim.py \
+  --input-npz data/processed/ngsim_us101_v2/samples_chunks \
+  --output-dir data/splits_us101_v2 \
+  --prefix ngsim_us101
+
+python scripts/check_dataloader.py \
+  --split-dir data/splits_us101_v2 \
+  --prefix ngsim_us101
+```
+
+The committed split chunks are sufficient for training on a server. Raw CSV
+files and expanded intermediate files stay local and are ignored by Git.
+
+## Training
+
+Start the minimal diffusion training pipeline:
+
+```bash
+python scripts/train_diffusion.py \
+  --config configs/ngsim_diffusion.yaml
+```
+
+Outputs:
+
+```text
+outputs/checkpoints/diffusion_best.pt
+outputs/checkpoints/diffusion_last.pt
+outputs/reports/diffusion_train_log.json
+```
+
+To resume training, set `training.resume_from` in
+`configs/ngsim_diffusion.yaml` to a checkpoint path.

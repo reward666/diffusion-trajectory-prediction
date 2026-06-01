@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Editors and operating systems
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local outputs
+outputs/*
+
+# Keep local raw and intermediate data out of Git.
+data/*
+!data/README.md
+!data/splits_us101_v2/
+!data/splits_us101_v2/**
+!data/processed/
+data/processed/*
+!data/processed/ngsim_us101_v2/
+data/processed/ngsim_us101_v2/*
+!data/processed/ngsim_us101_v2/metadata.json
+
