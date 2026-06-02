@@ -140,3 +140,36 @@ Output:
 ```text
 outputs/reports/scored_diffusion_test_metrics.json
 ```
+
+## Learned Candidate Scoring
+
+Keep the diffusion checkpoint fixed and generate candidate caches:
+
+```bash
+python scripts/generate_scorer_candidates.py \
+  --config configs/ngsim_diffusion.yaml \
+  --checkpoint outputs/checkpoints_leader/diffusion_best.pt \
+  --num-samples 6
+```
+
+Train the lightweight learned scorer:
+
+```bash
+python scripts/train_learned_scorer.py \
+  --candidates-dir outputs/scorer_candidates \
+  --output-dir outputs/checkpoints_scorer
+```
+
+Evaluate learned Top-1 selection:
+
+```bash
+python scripts/eval_learned_scorer.py \
+  --candidates-dir outputs/scorer_candidates \
+  --checkpoint outputs/checkpoints_scorer/scorer_best.pt
+```
+
+Output:
+
+```text
+outputs/reports/learned_scorer_metrics.json
+```
