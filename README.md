@@ -122,3 +122,21 @@ Output:
 ```text
 outputs/reports/constant_velocity_metrics.json
 ```
+
+## Rule-Based Candidate Scoring
+
+Rank diffusion candidates without ground truth using motion smoothness,
+initial-velocity consistency, lateral drift, and leader-gap risk:
+
+```bash
+python scripts/eval_scored_diffusion.py \
+  --config configs/ngsim_diffusion.yaml \
+  --checkpoint outputs/checkpoints_leader/diffusion_best.pt \
+  --num-samples 6
+```
+
+Output:
+
+```text
+outputs/reports/scored_diffusion_test_metrics.json
+```
