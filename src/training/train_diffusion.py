@@ -50,6 +50,7 @@ def build_data_config(config: dict[str, Any]) -> DataConfig:
         relative_xy=bool(data["relative_xy"]),
         normalize=bool(data["normalize"]),
         stats_path=Path(data["stats_path"]),
+        future_representation=data.get("future_representation", "position"),
     )
 
 
@@ -180,4 +181,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

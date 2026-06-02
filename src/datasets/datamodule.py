@@ -20,6 +20,7 @@ class DataConfig:
     relative_xy: bool = True
     normalize: bool = True
     stats_path: Path = Path("data/splits/ngsim_stats.npz")
+    future_representation: str = "position"
 
 
 def collate_batch(items: list[dict]) -> dict:
@@ -78,7 +79,9 @@ def get_or_create_stats(config: DataConfig) -> dict[str, np.ndarray] | None:
     if not config.normalize:
         return None
     if config.stats_path.exists():
-        return load_stats(config.stats_path)
+        stats = load_stats(config.stats_path)
+        if config.future_representation != "delta" or "future_delta_mean" in stats:
+            return stats
     stats = compute_normalization_stats(split_path(config, "train"))
     save_stats(stats, config.stats_path)
     return stats
@@ -92,6 +95,7 @@ def build_datasets(config: DataConfig) -> dict[str, TrajectoryNPZDataset]:
             relative_xy=config.relative_xy,
             normalize=config.normalize,
             stats=stats,
+            future_representation=config.future_representation,
         )
         for split in ["train", "val", "test"]
     }

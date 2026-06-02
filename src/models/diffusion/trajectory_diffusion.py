@@ -4,7 +4,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from src.models.diffusion.denoiser import MLPDenoiser
+from src.models.diffusion.denoiser import TemporalDenoiser
 from src.models.diffusion.scheduler import DDPMScheduler
 from src.models.diffusion.time_embedding import TimeEmbeddingMLP
 from src.models.encoders.trajectory_encoder import EgoLeaderEncoder
@@ -18,8 +18,8 @@ class TrajectoryDiffusion(nn.Module):
         future_dim: int = 2,
         condition_dim: int = 128,
         time_dim: int = 128,
-        denoiser_hidden_dim: int = 512,
-        denoiser_num_layers: int = 4,
+        denoiser_hidden_dim: int = 256,
+        denoiser_num_layers: int = 6,
         num_train_timesteps: int = 100,
     ):
         super().__init__()
@@ -33,7 +33,7 @@ class TrajectoryDiffusion(nn.Module):
         self.time_embedding = TimeEmbeddingMLP(
             output_dim=time_dim,
         )
-        self.denoiser = MLPDenoiser(
+        self.denoiser = TemporalDenoiser(
             pred_len=pred_len,
             future_dim=future_dim,
             time_dim=time_dim,
@@ -105,4 +105,3 @@ class TrajectoryDiffusion(nn.Module):
             device=past.device,
         )
         return generated.reshape(batch_size, num_samples, self.pred_len, self.future_dim)
-

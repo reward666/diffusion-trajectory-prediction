@@ -46,7 +46,8 @@ python scripts/split_ngsim.py \
 
 python scripts/check_dataloader.py \
   --split-dir data/splits_us101_v2 \
-  --prefix ngsim_us101
+  --prefix ngsim_us101 \
+  --future-representation delta
 ```
 
 The committed split chunks are sufficient for training on a server. Raw CSV
@@ -60,6 +61,10 @@ Start the minimal diffusion training pipeline:
 python scripts/train_diffusion.py \
   --config configs/ngsim_diffusion.yaml
 ```
+
+The current model diffuses framewise future displacements (`delta_x`,
+`delta_y`) and uses a temporal 1D CNN denoiser. Predictions are integrated
+back into positions for evaluation and visualization.
 
 Outputs:
 

@@ -9,7 +9,7 @@ import numpy as np
 from tqdm import tqdm
 
 from src.datasets.datamodule import build_dataloaders
-from src.datasets.normalization import load_stats
+from src.datasets.normalization import deltas_to_positions, load_stats
 from src.evaluation.metrics import MetricAccumulator, trajectory_metrics
 from src.models.baselines.constant_velocity import predict_constant_velocity
 from src.training.train_diffusion import build_data_config, load_yaml
@@ -19,7 +19,10 @@ def invert_past_normalization(values: np.ndarray, stats: dict[str, np.ndarray]) 
     return values * stats["past_std"] + stats["past_mean"]
 
 
-def invert_future_normalization(values: np.ndarray, stats: dict[str, np.ndarray]) -> np.ndarray:
+def decode_future(values: np.ndarray, stats: dict[str, np.ndarray], representation: str) -> np.ndarray:
+    if representation == "delta":
+        deltas = values * stats["future_delta_std"] + stats["future_delta_mean"]
+        return deltas_to_positions(deltas)
     return values * stats["future_std"] + stats["future_mean"]
 
 
@@ -54,7 +57,7 @@ def evaluate(
                 batch = {key: value[:remaining] for key, value in batch.items()}
 
         relative_past = invert_past_normalization(batch["past"], stats)
-        relative_future = invert_future_normalization(batch["future"], stats)
+        relative_future = decode_future(batch["future"], stats, data_config.future_representation)
         predictions = predict_constant_velocity(
             relative_past,
             pred_len=pred_len,
@@ -100,4 +103,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

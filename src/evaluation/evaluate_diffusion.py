@@ -10,14 +10,17 @@ import torch
 from tqdm import tqdm
 
 from src.datasets.datamodule import build_dataloaders
-from src.datasets.normalization import load_stats
+from src.datasets.normalization import deltas_to_positions, load_stats
 from src.evaluation.metrics import MetricAccumulator, trajectory_metrics
 from src.training.checkpoint import load_checkpoint
 from src.training.train_diffusion import build_data_config, build_model, get_feature_names, load_yaml, select_device, set_seed
 from src.visualization.trajectory_plot import plot_trajectory_prediction
 
 
-def invert_future_normalization(values: np.ndarray, stats: dict[str, np.ndarray]) -> np.ndarray:
+def decode_future(values: np.ndarray, stats: dict[str, np.ndarray], representation: str) -> np.ndarray:
+    if representation == "delta":
+        deltas = values * stats["future_delta_std"] + stats["future_delta_mean"]
+        return deltas_to_positions(deltas)
     return values * stats["future_std"] + stats["future_mean"]
 
 
@@ -67,8 +70,8 @@ def evaluate(
         past = torch.from_numpy(batch["past"]).to(device=device, dtype=torch.float32)
         normalized_predictions = model.sample(past, num_samples=num_samples).cpu().numpy()
         normalized_future = batch["future"]
-        relative_predictions = invert_future_normalization(normalized_predictions, stats)
-        relative_future = invert_future_normalization(normalized_future, stats)
+        relative_predictions = decode_future(normalized_predictions, stats, data_config.future_representation)
+        relative_future = decode_future(normalized_future, stats, data_config.future_representation)
         predictions_xy = relative_predictions + batch["origin"][:, None, None, :]
         future_xy = relative_future + batch["origin"][:, None, :]
         accumulator.update(trajectory_metrics(predictions_xy, future_xy))
@@ -128,4 +131,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

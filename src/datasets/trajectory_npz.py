@@ -4,6 +4,8 @@ from pathlib import Path
 
 import numpy as np
 
+from src.datasets.normalization import positions_to_deltas
+
 
 class TrajectoryNPZDataset:
     def __init__(
@@ -12,6 +14,7 @@ class TrajectoryNPZDataset:
         relative_xy: bool = True,
         normalize: bool = False,
         stats: dict[str, np.ndarray] | None = None,
+        future_representation: str = "position",
     ):
         self.npz_path = Path(npz_path)
         self.chunk_paths = self._find_chunks(self.npz_path)
@@ -27,9 +30,12 @@ class TrajectoryNPZDataset:
         self.relative_xy = relative_xy
         self.normalize = normalize
         self.stats = stats
+        self.future_representation = future_representation
 
         if self.normalize and self.stats is None:
             raise ValueError("stats must be provided when normalize=True.")
+        if self.future_representation not in {"position", "delta"}:
+            raise ValueError("future_representation must be 'position' or 'delta'.")
 
     @staticmethod
     def _find_chunks(path: Path) -> list[Path]:
@@ -75,9 +81,15 @@ class TrajectoryNPZDataset:
             past[:, :2] -= origin
             future[:, :2] -= origin
 
+        if self.future_representation == "delta":
+            future = positions_to_deltas(future[None, :, :2])[0]
+
         if self.normalize:
             past = (past - self.stats["past_mean"]) / self.stats["past_std"]
-            future = (future - self.stats["future_mean"]) / self.stats["future_std"]
+            if self.future_representation == "delta":
+                future = (future - self.stats["future_delta_mean"]) / self.stats["future_delta_std"]
+            else:
+                future = (future - self.stats["future_mean"]) / self.stats["future_std"]
 
         return past, future, origin.astype(np.float32)
 

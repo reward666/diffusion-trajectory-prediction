@@ -5,6 +5,7 @@ data:
   batch_size: 128
   relative_xy: true
   normalize: true
+  future_representation: delta
   shuffle_train: true
   seed: 42
 
@@ -13,8 +14,8 @@ model:
   future_dim: 2
   condition_dim: 128
   time_dim: 128
-  denoiser_hidden_dim: 512
-  denoiser_num_layers: 4
+  denoiser_hidden_dim: 256
+  denoiser_num_layers: 6
   num_train_timesteps: 100
 
 training:

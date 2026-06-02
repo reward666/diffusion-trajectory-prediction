@@ -20,6 +20,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--no-normalize", action="store_true")
     parser.add_argument("--absolute-xy", action="store_true")
+    parser.add_argument("--future-representation", choices=["position", "delta"], default="position")
     return parser.parse_args()
 
 
@@ -31,6 +32,7 @@ def main() -> None:
         batch_size=args.batch_size,
         normalize=not args.no_normalize,
         relative_xy=not args.absolute_xy,
+        future_representation=args.future_representation,
         stats_path=args.split_dir / f"{args.prefix}_stats.npz",
     )
     loaders = build_dataloaders(config)
