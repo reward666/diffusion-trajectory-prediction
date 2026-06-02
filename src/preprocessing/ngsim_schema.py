@@ -28,6 +28,30 @@ class NGSIMColumns:
 
 NGSIM_COLUMNS = NGSIMColumns()
 
+SOCIAL_NEIGHBOR_SLOTS = [
+    "leader",
+    "follower",
+    "left_leader",
+    "left_follower",
+    "right_leader",
+    "right_follower",
+]
+
+SOCIAL_NEIGHBOR_ATTRIBUTES = ["dx", "dy", "dvx", "dvy", "acc", "exists"]
+
+SOCIAL_NEIGHBOR_COLUMNS = [
+    f"{slot}_{attribute}"
+    for slot in SOCIAL_NEIGHBOR_SLOTS
+    for attribute in SOCIAL_NEIGHBOR_ATTRIBUTES
+]
+
+SOCIAL_EXTRA_COLUMNS = [
+    f"{slot}_{attribute}"
+    for slot in SOCIAL_NEIGHBOR_SLOTS
+    if slot != "leader"
+    for attribute in SOCIAL_NEIGHBOR_ATTRIBUTES
+]
+
 STANDARD_COLUMNS = [
     "scene_id",
     "source_file",
@@ -55,4 +79,5 @@ STANDARD_COLUMNS = [
     "following",
     "space_headway",
     "time_headway",
+    *SOCIAL_EXTRA_COLUMNS,
 ]

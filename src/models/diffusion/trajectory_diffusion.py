@@ -8,6 +8,7 @@ from src.models.diffusion.denoiser import TemporalDenoiser
 from src.models.diffusion.scheduler import DDPMScheduler
 from src.models.diffusion.time_embedding import TimeEmbeddingMLP
 from src.models.encoders.trajectory_encoder import EgoLeaderEncoder
+from src.models.encoders.social_encoder import EgoSocialAttentionEncoder
 
 
 class TrajectoryDiffusion(nn.Module):
@@ -21,15 +22,23 @@ class TrajectoryDiffusion(nn.Module):
         denoiser_hidden_dim: int = 256,
         denoiser_num_layers: int = 6,
         num_train_timesteps: int = 100,
+        encoder_type: str = "leader",
+        neighbor_exists_thresholds: list[float] | tuple[float, ...] | None = None,
     ):
         super().__init__()
         self.pred_len = pred_len
         self.future_dim = future_dim
 
-        self.encoder = EgoLeaderEncoder(
-            feature_names=feature_names,
-            output_dim=condition_dim,
-        )
+        if encoder_type == "leader":
+            self.encoder = EgoLeaderEncoder(feature_names=feature_names, output_dim=condition_dim)
+        elif encoder_type == "social_attention":
+            self.encoder = EgoSocialAttentionEncoder(
+                feature_names=feature_names,
+                output_dim=condition_dim,
+                neighbor_exists_thresholds=neighbor_exists_thresholds,
+            )
+        else:
+            raise ValueError(f"Unsupported encoder_type: {encoder_type}")
         self.time_embedding = TimeEmbeddingMLP(
             output_dim=time_dim,
         )

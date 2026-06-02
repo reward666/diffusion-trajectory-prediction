@@ -10,6 +10,7 @@ data:
   seed: 42
 
 model:
+  encoder_type: leader
   pred_len: 50
   future_dim: 2
   condition_dim: 128

@@ -13,7 +13,9 @@ from torch.optim import AdamW
 from tqdm import tqdm
 
 from src.datasets.datamodule import DataConfig, build_dataloaders
+from src.datasets.normalization import load_stats
 from src.models.diffusion.trajectory_diffusion import TrajectoryDiffusion
+from src.preprocessing.ngsim_schema import SOCIAL_NEIGHBOR_SLOTS
 from src.training.checkpoint import load_checkpoint, save_checkpoint
 
 
@@ -58,6 +60,20 @@ def get_feature_names(loader) -> list[str]:
     return [str(name) for name in loader.dataset.feature_names.tolist()]
 
 
+def get_neighbor_exists_thresholds(config: dict[str, Any], feature_names: list[str]) -> list[float] | None:
+    if config["model"].get("encoder_type", "leader") != "social_attention":
+        return None
+    if not config["data"]["normalize"]:
+        return [0.0] * len(SOCIAL_NEIGHBOR_SLOTS)
+
+    stats = load_stats(config["data"]["stats_path"])
+    feature_index = {name: index for index, name in enumerate(feature_names)}
+    return [
+        float(-stats["past_mean"][feature_index[f"{slot}_exists"]] / stats["past_std"][feature_index[f"{slot}_exists"]])
+        for slot in SOCIAL_NEIGHBOR_SLOTS
+    ]
+
+
 def build_model(config: dict[str, Any], feature_names: list[str]) -> TrajectoryDiffusion:
     model = config["model"]
     return TrajectoryDiffusion(
@@ -69,6 +85,8 @@ def build_model(config: dict[str, Any], feature_names: list[str]) -> TrajectoryD
         denoiser_hidden_dim=int(model["denoiser_hidden_dim"]),
         denoiser_num_layers=int(model["denoiser_num_layers"]),
         num_train_timesteps=int(model["num_train_timesteps"]),
+        encoder_type=model.get("encoder_type", "leader"),
+        neighbor_exists_thresholds=get_neighbor_exists_thresholds(config, feature_names),
     )
 
 

@@ -14,6 +14,11 @@ The `leader` dataset version adds explicit leader-relative position,
 velocity, acceleration, and presence features. It must be regenerated from
 the local raw CSV before training that model version.
 
+The `social` dataset version keeps the explicit leader features and adds
+follower, left-lane, and right-lane neighbor slots for the social-attention
+encoder. It is stored separately so leader-only and social models remain
+directly comparable.
+
 The current split is an MVP split grouped by:
 
 ```text

@@ -1,0 +1,37 @@
+{
+  "dataset": "ngsim",
+  "raw_dir": "data\\raw\\ngsim",
+  "samples_dir": "data\\processed\\ngsim_us101_social\\samples_chunks",
+  "num_files": 1,
+  "num_loaded_files": 1,
+  "num_skipped_files": 0,
+  "skipped_files": [],
+  "num_rows": 4802933,
+  "num_tracks": 2847,
+  "num_samples": 118437,
+  "num_chunks": 12,
+  "past_shape": [
+    118437,
+    30,
+    48
+  ],
+  "future_shape": [
+    118437,
+    50,
+    2
+  ],
+  "coord_unit": "meter",
+  "config": {
+    "raw_dir": "data\\raw\\ngsim",
+    "output_dir": "data\\processed\\ngsim_us101_social",
+    "obs_len": 30,
+    "pred_len": 50,
+    "stride": 20,
+    "fps": 10.0,
+    "use_global_xy": false,
+    "convert_feet_to_meters": true,
+    "min_track_len": null,
+    "chunk_size": 10000,
+    "location": "us-101"
+  }
+}

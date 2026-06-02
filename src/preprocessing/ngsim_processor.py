@@ -9,7 +9,7 @@ from typing import Iterable
 import numpy as np
 import pandas as pd
 
-from src.preprocessing.ngsim_schema import NGSIM_COLUMNS, STANDARD_COLUMNS
+from src.preprocessing.ngsim_schema import NGSIM_COLUMNS, SOCIAL_EXTRA_COLUMNS, SOCIAL_NEIGHBOR_COLUMNS, STANDARD_COLUMNS
 
 
 @dataclass(frozen=True)
@@ -118,6 +118,68 @@ def attach_explicit_leader_features(tracks: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def attach_social_neighbor_features(tracks: pd.DataFrame) -> pd.DataFrame:
+    tracks = tracks.copy()
+    social = pd.DataFrame(0.0, index=tracks.index, columns=SOCIAL_NEIGHBOR_COLUMNS)
+    group_cols = ["scene_id", "source_file", "frame"]
+    for _, frame_tracks in tracks.groupby(group_cols, sort=False):
+        _fill_frame_social_slots(frame_tracks, social)
+    return tracks.join(social[SOCIAL_EXTRA_COLUMNS])
+
+
+def _fill_frame_social_slots(frame_tracks: pd.DataFrame, social: pd.DataFrame) -> None:
+    lanes = {
+        lane_id: lane.sort_values("y")
+        for lane_id, lane in frame_tracks.dropna(subset=["lane_id"]).groupby("lane_id", sort=False)
+    }
+    for lane_id, lane in lanes.items():
+        if len(lane) > 1:
+            _fill_social_slots_batch(social, lane.iloc[:-1], lane.iloc[1:], "leader")
+            _fill_social_slots_batch(social, lane.iloc[1:], lane.iloc[:-1], "follower")
+        _fill_adjacent_lane_slots(social, lane, lanes.get(lane_id - 1), "left")
+        _fill_adjacent_lane_slots(social, lane, lanes.get(lane_id + 1), "right")
+
+
+def _fill_adjacent_lane_slots(
+    social: pd.DataFrame,
+    ego_lane: pd.DataFrame,
+    neighbor_lane: pd.DataFrame | None,
+    side: str,
+) -> None:
+    if neighbor_lane is None or neighbor_lane.empty:
+        return
+    neighbor_y = neighbor_lane["y"].to_numpy()
+    ego_y = ego_lane["y"].to_numpy()
+    ahead_positions = np.searchsorted(neighbor_y, ego_y, side="right")
+    behind_positions = np.searchsorted(neighbor_y, ego_y, side="left") - 1
+    ahead_valid = ahead_positions < len(neighbor_lane)
+    behind_valid = behind_positions >= 0
+    if ahead_valid.any():
+        _fill_social_slots_batch(
+            social,
+            ego_lane.iloc[np.flatnonzero(ahead_valid)],
+            neighbor_lane.iloc[ahead_positions[ahead_valid]],
+            f"{side}_leader",
+        )
+    if behind_valid.any():
+        _fill_social_slots_batch(
+            social,
+            ego_lane.iloc[np.flatnonzero(behind_valid)],
+            neighbor_lane.iloc[behind_positions[behind_valid]],
+            f"{side}_follower",
+        )
+
+
+def _fill_social_slots_batch(social: pd.DataFrame, ego: pd.DataFrame, neighbor: pd.DataFrame, slot: str) -> None:
+    ego_index = ego.index
+    social.loc[ego_index, f"{slot}_dx"] = neighbor["x"].to_numpy() - ego["x"].to_numpy()
+    social.loc[ego_index, f"{slot}_dy"] = neighbor["y"].to_numpy() - ego["y"].to_numpy()
+    social.loc[ego_index, f"{slot}_dvx"] = neighbor["vx"].to_numpy() - ego["vx"].to_numpy()
+    social.loc[ego_index, f"{slot}_dvy"] = neighbor["vy"].to_numpy() - ego["vy"].to_numpy()
+    social.loc[ego_index, f"{slot}_acc"] = neighbor["acc"].fillna(0.0).to_numpy()
+    social.loc[ego_index, f"{slot}_exists"] = 1.0
+
+
 def load_ngsim_file(path: Path, raw_dir: Path, config: NGSIMProcessConfig) -> pd.DataFrame:
     df = _clean_columns(read_ngsim_table(path))
     _require_columns(df, path)
@@ -192,6 +254,7 @@ def load_ngsim_file(path: Path, raw_dir: Path, config: NGSIMProcessConfig) -> pd
 
     out["preceding_exists"] = (out["preceding"].fillna(0) > 0).astype(np.float32)
     out = attach_explicit_leader_features(out)
+    out = attach_social_neighbor_features(out)
     return out[STANDARD_COLUMNS]
 
 
@@ -266,6 +329,7 @@ def build_prediction_windows(tracks: pd.DataFrame, config: NGSIMProcessConfig) -
         "leader_exists",
         "space_headway",
         "time_headway",
+        *SOCIAL_EXTRA_COLUMNS,
     ]
     min_len = config.min_track_len or config.total_len
 
@@ -353,6 +417,7 @@ def process_ngsim(config: NGSIMProcessConfig) -> dict:
         "x", "y", "vx", "vy", "speed", "acc", "lane_id", "vehicle_class",
         "length", "width", "leader_dx", "leader_dy", "leader_dvx", "leader_dvy",
         "leader_acc", "leader_exists", "space_headway", "time_headway",
+        *SOCIAL_EXTRA_COLUMNS,
     ]
     tracks_path = config.output_dir / "tracks.csv"
     skipped = []

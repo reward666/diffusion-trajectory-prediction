@@ -1,0 +1,30 @@
+data:
+  split_dir: data/splits_us101_social
+  prefix: ngsim_us101_social
+  stats_path: data/splits_us101_social/ngsim_us101_social_stats.npz
+  batch_size: 128
+  relative_xy: true
+  normalize: true
+  future_representation: delta
+  shuffle_train: true
+  seed: 42
+
+model:
+  encoder_type: social_attention
+  pred_len: 50
+  future_dim: 2
+  condition_dim: 128
+  time_dim: 128
+  denoiser_hidden_dim: 256
+  denoiser_num_layers: 6
+  num_train_timesteps: 100
+
+training:
+  epochs: 30
+  learning_rate: 0.001
+  weight_decay: 0.000001
+  device: auto
+  checkpoint_dir: outputs/checkpoints_social
+  log_path: outputs/reports/diffusion_social_train_log.json
+  resume_from:
+
