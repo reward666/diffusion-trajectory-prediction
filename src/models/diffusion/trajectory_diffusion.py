@@ -24,6 +24,10 @@ class TrajectoryDiffusion(nn.Module):
         num_train_timesteps: int = 100,
         encoder_type: str = "leader",
         neighbor_exists_thresholds: list[float] | tuple[float, ...] | None = None,
+        neighbor_position_means: list[list[float]] | tuple[tuple[float, float], ...] | None = None,
+        neighbor_position_stds: list[list[float]] | tuple[tuple[float, float], ...] | None = None,
+        use_slot_embedding: bool = False,
+        max_neighbor_distance_m: float | None = None,
     ):
         super().__init__()
         self.pred_len = pred_len
@@ -36,6 +40,10 @@ class TrajectoryDiffusion(nn.Module):
                 feature_names=feature_names,
                 output_dim=condition_dim,
                 neighbor_exists_thresholds=neighbor_exists_thresholds,
+                neighbor_position_means=neighbor_position_means,
+                neighbor_position_stds=neighbor_position_stds,
+                use_slot_embedding=use_slot_embedding,
+                max_neighbor_distance_m=max_neighbor_distance_m,
             )
         else:
             raise ValueError(f"Unsupported encoder_type: {encoder_type}")

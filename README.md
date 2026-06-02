@@ -94,6 +94,16 @@ python scripts/train_diffusion.py \
 The social encoder applies temporal attention to ego and neighbor histories,
 then pools neighbors with ego-conditioned social attention.
 
+### Slot-Aware Social Ablation
+
+Reuse the same social dataset to test slot embeddings and a 60-meter neighbor
+distance gate. This experiment writes checkpoints to a separate directory.
+
+```bash
+python scripts/train_diffusion.py \
+  --config configs/ngsim_social_slot_diffusion.yaml
+```
+
 ## Training
 
 Start the minimal diffusion training pipeline:
@@ -119,41 +129,6 @@ outputs/reports/diffusion_train_log.json
 
 To resume training, set `training.resume_from` in
 `configs/ngsim_diffusion.yaml` to a checkpoint path.
-
-## Social-Attention Experiment
-
-The leader-only experiment remains available through
-`configs/ngsim_diffusion.yaml`. To compare it with a richer interaction model,
-build an isolated social dataset version and train with
-`configs/ngsim_social_diffusion.yaml`.
-
-The social encoder keeps the ego-history branch and replaces the single-leader
-branch with six neighbor slots: leader, follower, left-lane leader,
-left-lane follower, right-lane leader, and right-lane follower. Each neighbor
-is encoded by a shared GRU. Temporal attention summarizes each history, then
-social attention pools the available neighbor embeddings conditioned on the
-ego embedding.
-
-```powershell
-python scripts\prepare_ngsim.py `
-  --raw-dir data\raw\ngsim `
-  --output-dir data\processed\ngsim_us101_social `
-  --location us-101 `
-  --stride 20 `
-  --chunk-size 10000
-
-python scripts\split_ngsim.py `
-  --input-npz data\processed\ngsim_us101_social\samples_chunks `
-  --output-dir data\splits_us101_social `
-  --prefix ngsim_us101_social
-
-python scripts\check_dataloader.py `
-  --split-dir data\splits_us101_social `
-  --prefix ngsim_us101_social `
-  --future-representation delta
-
-python scripts\train_diffusion.py --config configs/ngsim_social_diffusion.yaml
-```
 
 ## Evaluation And Static Visualization
 

@@ -34,6 +34,10 @@ class EgoSocialAttentionEncoder(nn.Module):
         num_attention_heads: int = 4,
         dropout: float = 0.0,
         neighbor_exists_thresholds: list[float] | tuple[float, ...] | None = None,
+        neighbor_position_means: list[list[float]] | tuple[tuple[float, float], ...] | None = None,
+        neighbor_position_stds: list[list[float]] | tuple[tuple[float, float], ...] | None = None,
+        use_slot_embedding: bool = False,
+        max_neighbor_distance_m: float | None = None,
     ):
         super().__init__()
         self.feature_spec = TrajectoryFeatureSpec(tuple(feature_names))
@@ -68,6 +72,25 @@ class EgoSocialAttentionEncoder(nn.Module):
             "neighbor_exists_thresholds",
             torch.tensor(neighbor_exists_thresholds, dtype=torch.float32),
         )
+        if neighbor_position_means is None:
+            neighbor_position_means = [[0.0, 0.0] for _ in self.neighbor_slots]
+        if neighbor_position_stds is None:
+            neighbor_position_stds = [[1.0, 1.0] for _ in self.neighbor_slots]
+        if len(neighbor_position_means) != len(self.neighbor_slots):
+            raise ValueError(f"Expected {len(self.neighbor_slots)} neighbor position means.")
+        if len(neighbor_position_stds) != len(self.neighbor_slots):
+            raise ValueError(f"Expected {len(self.neighbor_slots)} neighbor position stds.")
+        self.register_buffer(
+            "neighbor_position_means",
+            torch.tensor(neighbor_position_means, dtype=torch.float32),
+            persistent=False,
+        )
+        self.register_buffer(
+            "neighbor_position_stds",
+            torch.tensor(neighbor_position_stds, dtype=torch.float32),
+            persistent=False,
+        )
+        self.max_neighbor_distance_m = max_neighbor_distance_m
 
         self.ego_gru = nn.GRU(len(self.ego_indices), ego_hidden_dim, batch_first=True)
         self.neighbor_gru = nn.GRU(len(self.neighbor_attributes), neighbor_hidden_dim, batch_first=True)
@@ -80,6 +103,7 @@ class EgoSocialAttentionEncoder(nn.Module):
             dropout=dropout,
             batch_first=True,
         )
+        self.slot_embedding = nn.Embedding(len(self.neighbor_slots), neighbor_hidden_dim) if use_slot_embedding else None
         self.fusion = nn.Sequential(
             nn.Linear(ego_hidden_dim + neighbor_hidden_dim, output_dim),
             nn.SiLU(),
@@ -99,11 +123,22 @@ class EgoSocialAttentionEncoder(nn.Module):
             neighbors[:, :, :, self.exists_attribute_index]
             > self.neighbor_exists_thresholds[None, :, None]
         )
+        if self.max_neighbor_distance_m is not None:
+            raw_neighbor_xy = (
+                neighbors[:, :, :, :2] * self.neighbor_position_stds[None, :, None, :]
+                + self.neighbor_position_means[None, :, None, :]
+            )
+            neighbor_distance = torch.linalg.vector_norm(raw_neighbor_xy, dim=-1)
+            neighbor_mask &= neighbor_distance <= self.max_neighbor_distance_m
+            neighbors = neighbors.masked_fill(~neighbor_mask.unsqueeze(-1), 0.0)
         flattened_neighbors = neighbors.reshape(batch_size * len(self.neighbor_slots), obs_len, -1)
         flattened_mask = neighbor_mask.reshape(batch_size * len(self.neighbor_slots), obs_len)
         neighbor_sequence, _ = self.neighbor_gru(flattened_neighbors)
         neighbor_context = self.neighbor_temporal_pool(neighbor_sequence, flattened_mask)
         neighbor_context = neighbor_context.reshape(batch_size, len(self.neighbor_slots), -1)
+        if self.slot_embedding is not None:
+            slot_ids = torch.arange(len(self.neighbor_slots), device=past.device)
+            neighbor_context = neighbor_context + self.slot_embedding(slot_ids)[None, :, :]
 
         slot_missing = ~neighbor_mask.any(dim=2)
         all_slots_missing = slot_missing.all(dim=1)

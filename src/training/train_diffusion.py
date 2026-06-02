@@ -74,8 +74,31 @@ def get_neighbor_exists_thresholds(config: dict[str, Any], feature_names: list[s
     ]
 
 
+def get_neighbor_position_stats(
+    config: dict[str, Any],
+    feature_names: list[str],
+) -> tuple[list[list[float]] | None, list[list[float]] | None]:
+    if config["model"].get("encoder_type", "leader") != "social_attention":
+        return None, None
+    if not config["data"]["normalize"]:
+        return None, None
+
+    stats = load_stats(config["data"]["stats_path"])
+    feature_index = {name: index for index, name in enumerate(feature_names)}
+    means = [
+        [float(stats["past_mean"][feature_index[f"{slot}_{axis}"]]) for axis in ["dx", "dy"]]
+        for slot in SOCIAL_NEIGHBOR_SLOTS
+    ]
+    stds = [
+        [float(stats["past_std"][feature_index[f"{slot}_{axis}"]]) for axis in ["dx", "dy"]]
+        for slot in SOCIAL_NEIGHBOR_SLOTS
+    ]
+    return means, stds
+
+
 def build_model(config: dict[str, Any], feature_names: list[str]) -> TrajectoryDiffusion:
     model = config["model"]
+    neighbor_position_means, neighbor_position_stds = get_neighbor_position_stats(config, feature_names)
     return TrajectoryDiffusion(
         feature_names=feature_names,
         pred_len=int(model["pred_len"]),
@@ -87,6 +110,10 @@ def build_model(config: dict[str, Any], feature_names: list[str]) -> TrajectoryD
         num_train_timesteps=int(model["num_train_timesteps"]),
         encoder_type=model.get("encoder_type", "leader"),
         neighbor_exists_thresholds=get_neighbor_exists_thresholds(config, feature_names),
+        neighbor_position_means=neighbor_position_means,
+        neighbor_position_stds=neighbor_position_stds,
+        use_slot_embedding=bool(model.get("use_slot_embedding", False)),
+        max_neighbor_distance_m=model.get("max_neighbor_distance_m"),
     )
 
 
