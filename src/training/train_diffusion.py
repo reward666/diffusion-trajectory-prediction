@@ -109,6 +109,7 @@ def build_model(config: dict[str, Any], feature_names: list[str]) -> TrajectoryD
         denoiser_num_layers=int(model["denoiser_num_layers"]),
         num_train_timesteps=int(model["num_train_timesteps"]),
         encoder_type=model.get("encoder_type", "leader"),
+        denoiser_type=model.get("denoiser_type", "temporal_cnn"),
         neighbor_exists_thresholds=get_neighbor_exists_thresholds(config, feature_names),
         neighbor_position_means=neighbor_position_means,
         neighbor_position_stds=neighbor_position_stds,

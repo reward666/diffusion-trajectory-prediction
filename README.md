@@ -130,6 +130,18 @@ outputs/reports/diffusion_train_log.json
 To resume training, set `training.resume_from` in
 `configs/ngsim_diffusion.yaml` to a checkpoint path.
 
+### Leader Temporal U-Net Ablation
+
+Keep the leader-only encoder and replace the single-scale temporal CNN
+denoiser with a three-scale Temporal U-Net:
+
+```bash
+python scripts/train_diffusion.py \
+  --config configs/ngsim_leader_unet_diffusion.yaml
+```
+
+This experiment writes checkpoints to `outputs/checkpoints_leader_unet`.
+
 ## Evaluation And Static Visualization
 
 Evaluate the best checkpoint with six diffusion samples per trajectory:

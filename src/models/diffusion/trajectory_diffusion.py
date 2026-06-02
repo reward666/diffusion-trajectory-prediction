@@ -6,6 +6,7 @@ from torch.nn import functional as F
 
 from src.models.diffusion.denoiser import TemporalDenoiser
 from src.models.diffusion.scheduler import DDPMScheduler
+from src.models.diffusion.temporal_unet import TemporalUNetDenoiser
 from src.models.diffusion.time_embedding import TimeEmbeddingMLP
 from src.models.encoders.trajectory_encoder import EgoLeaderEncoder
 from src.models.encoders.social_encoder import EgoSocialAttentionEncoder
@@ -23,6 +24,7 @@ class TrajectoryDiffusion(nn.Module):
         denoiser_num_layers: int = 6,
         num_train_timesteps: int = 100,
         encoder_type: str = "leader",
+        denoiser_type: str = "temporal_cnn",
         neighbor_exists_thresholds: list[float] | tuple[float, ...] | None = None,
         neighbor_position_means: list[list[float]] | tuple[tuple[float, float], ...] | None = None,
         neighbor_position_stds: list[list[float]] | tuple[tuple[float, float], ...] | None = None,
@@ -50,7 +52,13 @@ class TrajectoryDiffusion(nn.Module):
         self.time_embedding = TimeEmbeddingMLP(
             output_dim=time_dim,
         )
-        self.denoiser = TemporalDenoiser(
+        denoiser_class = {
+            "temporal_cnn": TemporalDenoiser,
+            "temporal_unet": TemporalUNetDenoiser,
+        }.get(denoiser_type)
+        if denoiser_class is None:
+            raise ValueError(f"Unsupported denoiser_type: {denoiser_type}")
+        self.denoiser = denoiser_class(
             pred_len=pred_len,
             future_dim=future_dim,
             time_dim=time_dim,
