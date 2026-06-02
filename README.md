@@ -34,19 +34,19 @@ and keeps every vehicle inside exactly one split:
 ```bash
 python scripts/prepare_ngsim.py \
   --raw-dir data/raw/ngsim \
-  --output-dir data/processed/ngsim_us101_v2 \
+  --output-dir data/processed/ngsim_us101_leader \
   --location us-101 \
   --stride 20 \
   --chunk-size 10000
 
 python scripts/split_ngsim.py \
-  --input-npz data/processed/ngsim_us101_v2/samples_chunks \
-  --output-dir data/splits_us101_v2 \
-  --prefix ngsim_us101
+  --input-npz data/processed/ngsim_us101_leader/samples_chunks \
+  --output-dir data/splits_us101_leader \
+  --prefix ngsim_us101_leader
 
 python scripts/check_dataloader.py \
-  --split-dir data/splits_us101_v2 \
-  --prefix ngsim_us101 \
+  --split-dir data/splits_us101_leader \
+  --prefix ngsim_us101_leader \
   --future-representation delta
 ```
 
@@ -63,8 +63,10 @@ python scripts/train_diffusion.py \
 ```
 
 The current model diffuses framewise future displacements (`delta_x`,
-`delta_y`) and uses a temporal 1D CNN denoiser. Predictions are integrated
-back into positions for evaluation and visualization.
+`delta_y`) and uses a temporal 1D CNN denoiser. The encoder receives ego
+history and explicit leader-history features matched within the same
+`Location`, source file, and frame. Predictions are integrated back into
+positions for evaluation and visualization.
 
 Outputs:
 

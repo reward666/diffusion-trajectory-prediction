@@ -10,6 +10,10 @@ data/splits_us101_v2
 The raw NGSIM CSV, expanded track CSV files, and intermediate preprocessing
 chunks remain local and are intentionally ignored by Git.
 
+The `leader` dataset version adds explicit leader-relative position,
+velocity, acceleration, and presence features. It must be regenerated from
+the local raw CSV before training that model version.
+
 The current split is an MVP split grouped by:
 
 ```text
@@ -19,4 +23,3 @@ Location + source_file + Vehicle_ID
 All windows from one vehicle stay in exactly one split. For final reported
 experiments, replace this with a stricter time-block split with a boundary
 gap between train, validation, and test segments.
-

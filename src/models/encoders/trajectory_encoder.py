@@ -43,9 +43,14 @@ class EgoLeaderEncoder(nn.Module):
             "width",
         ]
         self.leader_feature_names = [
+            "leader_dx",
+            "leader_dy",
+            "leader_dvx",
+            "leader_dvy",
+            "leader_acc",
+            "leader_exists",
             "space_headway",
             "time_headway",
-            "preceding_exists",
         ]
         self.ego_indices = self.feature_spec.indices(self.ego_feature_names)
         self.leader_indices = self.feature_spec.indices(self.leader_feature_names)

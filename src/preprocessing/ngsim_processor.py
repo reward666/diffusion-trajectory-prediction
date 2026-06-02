@@ -74,6 +74,50 @@ def _numeric_or_default(df: pd.DataFrame, column: str, default: float = np.nan) 
     return pd.Series(default, index=df.index, dtype="float64")
 
 
+def attach_explicit_leader_features(tracks: pd.DataFrame) -> pd.DataFrame:
+    lookup = tracks[
+        ["scene_id", "source_file", "frame", "_track_lookup_id", "x", "y", "vx", "vy", "acc"]
+    ].rename(
+        columns={
+            "_track_lookup_id": "_leader_lookup_id",
+            "x": "_leader_x",
+            "y": "_leader_y",
+            "vx": "_leader_vx",
+            "vy": "_leader_vy",
+            "acc": "_leader_acc",
+        }
+    )
+    lookup = lookup.drop_duplicates(["scene_id", "source_file", "frame", "_leader_lookup_id"])
+    tracks = tracks.merge(
+        lookup,
+        how="left",
+        on=["scene_id", "source_file", "frame", "_leader_lookup_id"],
+        validate="many_to_one",
+    )
+
+    tracks["leader_exists"] = tracks["_leader_x"].notna().astype(np.float32)
+    tracks["leader_dx"] = (tracks["_leader_x"] - tracks["x"]).fillna(0.0)
+    tracks["leader_dy"] = (tracks["_leader_y"] - tracks["y"]).fillna(0.0)
+    tracks["leader_dvx"] = (tracks["_leader_vx"] - tracks["vx"]).fillna(0.0)
+    tracks["leader_dvy"] = (tracks["_leader_vy"] - tracks["vy"]).fillna(0.0)
+    tracks["leader_acc"] = tracks["_leader_acc"].fillna(0.0)
+    missing_leader = tracks["leader_exists"] == 0
+    tracks.loc[missing_leader, ["space_headway", "time_headway"]] = 0.0
+    tracks["space_headway"] = tracks["space_headway"].fillna(0.0).clip(lower=0.0, upper=200.0)
+    tracks["time_headway"] = tracks["time_headway"].fillna(0.0).clip(lower=0.0, upper=20.0)
+    return tracks.drop(
+        columns=[
+            "_track_lookup_id",
+            "_leader_lookup_id",
+            "_leader_x",
+            "_leader_y",
+            "_leader_vx",
+            "_leader_vy",
+            "_leader_acc",
+        ]
+    )
+
+
 def load_ngsim_file(path: Path, raw_dir: Path, config: NGSIMProcessConfig) -> pd.DataFrame:
     df = _clean_columns(read_ngsim_table(path))
     _require_columns(df, path)
@@ -96,6 +140,8 @@ def load_ngsim_file(path: Path, raw_dir: Path, config: NGSIMProcessConfig) -> pd
             "source_file": str(path.relative_to(raw_dir)),
             "frame": pd.to_numeric(df[cols.frame_id], errors="coerce").astype("Int64"),
             "track_id": df[cols.vehicle_id].astype(str),
+            "_track_lookup_id": pd.to_numeric(df[cols.vehicle_id], errors="coerce"),
+            "_leader_lookup_id": _numeric_or_default(df, cols.preceding),
             "x": pd.to_numeric(df[x_col], errors="coerce"),
             "y": pd.to_numeric(df[y_col], errors="coerce"),
             "speed": _numeric_or_default(df, cols.speed),
@@ -113,6 +159,8 @@ def load_ngsim_file(path: Path, raw_dir: Path, config: NGSIMProcessConfig) -> pd
 
     out = out.dropna(subset=["frame", "x", "y"]).copy()
     out["frame"] = out["frame"].astype(int)
+    if config.location:
+        out = out[out["scene_id"] == config.location.strip().lower()].copy()
 
     if config.convert_feet_to_meters:
         ft_cols = ["x", "y", "speed", "acc", "length", "width", "space_headway"]
@@ -143,6 +191,7 @@ def load_ngsim_file(path: Path, raw_dir: Path, config: NGSIMProcessConfig) -> pd
         out["speed"] = out["speed"].fillna(np.hypot(out["vx"], out["vy"]))
 
     out["preceding_exists"] = (out["preceding"].fillna(0) > 0).astype(np.float32)
+    out = attach_explicit_leader_features(out)
     return out[STANDARD_COLUMNS]
 
 
@@ -209,7 +258,12 @@ def build_prediction_windows(tracks: pd.DataFrame, config: NGSIMProcessConfig) -
         "vehicle_class",
         "length",
         "width",
-        "preceding_exists",
+        "leader_dx",
+        "leader_dy",
+        "leader_dvx",
+        "leader_dvy",
+        "leader_acc",
+        "leader_exists",
         "space_headway",
         "time_headway",
     ]
@@ -297,7 +351,8 @@ def process_ngsim(config: NGSIMProcessConfig) -> dict:
 
     feature_cols = [
         "x", "y", "vx", "vy", "speed", "acc", "lane_id", "vehicle_class",
-        "length", "width", "preceding_exists", "space_headway", "time_headway",
+        "length", "width", "leader_dx", "leader_dy", "leader_dvx", "leader_dvy",
+        "leader_acc", "leader_exists", "space_headway", "time_headway",
     ]
     tracks_path = config.output_dir / "tracks.csv"
     skipped = []

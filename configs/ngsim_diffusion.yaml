@@ -1,7 +1,7 @@
 data:
-  split_dir: data/splits_us101_v2
-  prefix: ngsim_us101
-  stats_path: data/splits_us101_v2/ngsim_us101_stats.npz
+  split_dir: data/splits_us101_leader
+  prefix: ngsim_us101_leader
+  stats_path: data/splits_us101_leader/ngsim_us101_leader_stats.npz
   batch_size: 128
   relative_xy: true
   normalize: true
@@ -23,6 +23,6 @@ training:
   learning_rate: 0.001
   weight_decay: 0.000001
   device: auto
-  checkpoint_dir: outputs/checkpoints
-  log_path: outputs/reports/diffusion_train_log.json
+  checkpoint_dir: outputs/checkpoints_leader
+  log_path: outputs/reports/diffusion_leader_train_log.json
   resume_from:
