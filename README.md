@@ -98,3 +98,20 @@ Outputs:
 outputs/reports/diffusion_test_metrics.json
 outputs/figures/diffusion_test/*.png
 ```
+
+## Constant-Velocity Baseline
+
+Compare diffusion predictions with a simple constant-velocity extrapolation:
+
+```bash
+python scripts/eval_constant_velocity.py \
+  --config configs/ngsim_diffusion.yaml \
+  --fps 10 \
+  --velocity-window 5
+```
+
+Output:
+
+```text
+outputs/reports/constant_velocity_metrics.json
+```
