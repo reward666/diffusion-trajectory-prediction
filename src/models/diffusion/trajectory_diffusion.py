@@ -4,6 +4,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from src.models.diffusion.dilated_film_denoiser import DilatedFiLMDenoiser
 from src.models.diffusion.denoiser import TemporalDenoiser
 from src.models.diffusion.scheduler import DDPMScheduler
 from src.models.diffusion.temporal_unet import TemporalUNetDenoiser
@@ -55,6 +56,7 @@ class TrajectoryDiffusion(nn.Module):
         denoiser_class = {
             "temporal_cnn": TemporalDenoiser,
             "temporal_unet": TemporalUNetDenoiser,
+            "dilated_film_cnn": DilatedFiLMDenoiser,
         }.get(denoiser_type)
         if denoiser_class is None:
             raise ValueError(f"Unsupported denoiser_type: {denoiser_type}")

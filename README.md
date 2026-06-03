@@ -142,6 +142,21 @@ python scripts/train_diffusion.py \
 
 This experiment writes checkpoints to `outputs/checkpoints_leader_unet`.
 
+### Leader Dilated FiLM CNN Ablation
+
+Keep the leader-only encoder and replace the denoiser with a dilated temporal
+CNN. Dilated convolutions increase temporal receptive field without
+downsampling, and FiLM conditioning injects timestep and history context as
+feature-wise scale and shift.
+
+```bash
+python scripts/train_diffusion.py \
+  --config configs/ngsim_leader_dilated_film_diffusion.yaml
+```
+
+This experiment writes checkpoints to
+`outputs/checkpoints_leader_dilated_film`.
+
 ## Evaluation And Static Visualization
 
 Evaluate the best checkpoint with six diffusion samples per trajectory:
