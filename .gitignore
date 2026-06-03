@@ -19,21 +19,3 @@ outputs/*
 # Keep local raw and intermediate data out of Git.
 data/*
 !data/README.md
-!data/splits_us101_v2/
-!data/splits_us101_v2/**
-!data/splits_us101_leader/
-!data/splits_us101_leader/**
-!data/splits_us101_social/
-!data/splits_us101_social/**
-!data/processed/
-data/processed/*
-!data/processed/ngsim_us101_v2/
-data/processed/ngsim_us101_v2/*
-!data/processed/ngsim_us101_v2/metadata.json
-!data/processed/ngsim_us101_leader/
-data/processed/ngsim_us101_leader/*
-!data/processed/ngsim_us101_leader/metadata.json
-!data/processed/ngsim_us101_social/
-data/processed/ngsim_us101_social/*
-!data/processed/ngsim_us101_social/metadata.json
-
