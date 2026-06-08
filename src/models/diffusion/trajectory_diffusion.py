@@ -118,13 +118,16 @@ class TrajectoryDiffusion(nn.Module):
             raise ValueError("num_samples must be positive.")
 
         if isinstance(condition_input, dict):
-            batch_size = next(iter(condition_input.values())).shape[0]
+            first_value = next(iter(condition_input.values()))
+            batch_size = first_value.shape[0]
+            device = first_value.device
             repeated_condition = {
                 key: value.repeat_interleave(num_samples, dim=0)
                 for key, value in condition_input.items()
             }
         else:
             batch_size = condition_input.shape[0]
+            device = condition_input.device
             repeated_condition = condition_input.repeat_interleave(num_samples, dim=0)
         condition_emb = self.encoder(repeated_condition)
 
@@ -134,6 +137,6 @@ class TrajectoryDiffusion(nn.Module):
         generated = self.scheduler.sample(
             denoise_fn=denoise_fn,
             shape=(batch_size * num_samples, self.pred_len, self.future_dim),
-            device=past.device,
+            device=device,
         )
         return generated.reshape(batch_size, num_samples, self.pred_len, self.future_dim)
