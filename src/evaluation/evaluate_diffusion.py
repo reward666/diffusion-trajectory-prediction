@@ -10,6 +10,7 @@ import torch
 from tqdm import tqdm
 
 from src.datasets.datamodule import build_dataloaders
+from src.datasets.graph_normalization import load_graph_stats
 from src.datasets.normalization import deltas_to_positions, load_stats
 from src.evaluation.metrics import MetricAccumulator, trajectory_metrics
 from src.training.checkpoint import load_checkpoint
@@ -25,7 +26,9 @@ def decode_future(values: np.ndarray, stats: dict[str, np.ndarray], representati
 
 
 def invert_past_xy_normalization(values: np.ndarray, stats: dict[str, np.ndarray]) -> np.ndarray:
-    return values * stats["past_std"][:2] + stats["past_mean"][:2]
+    if "past_std" in stats:
+        return values * stats["past_std"][:2] + stats["past_mean"][:2]
+    return values * stats["ego_std"][:2] + stats["ego_mean"][:2]
 
 
 def save_report(path: Path, report: dict[str, Any]) -> None:
@@ -54,7 +57,7 @@ def evaluate(
     model = build_model(config, feature_names).to(device)
     checkpoint = load_checkpoint(checkpoint_path, model, map_location=device)
     model.eval()
-    stats = load_stats(data_config.stats_path)
+    stats = load_graph_stats(data_config.stats_path) if data_config.dataset_type == "graph" else load_stats(data_config.stats_path)
 
     accumulator = MetricAccumulator()
     plotted = 0
@@ -67,8 +70,16 @@ def evaluate(
             if len(batch["past"]) > remaining:
                 batch = {key: value[:remaining] for key, value in batch.items()}
 
-        past = torch.from_numpy(batch["past"]).to(device=device, dtype=torch.float32)
-        normalized_predictions = model.sample(past, num_samples=num_samples).cpu().numpy()
+        if "past" in batch:
+            condition_input = torch.from_numpy(batch["past"]).to(device=device, dtype=torch.float32)
+            past_for_plot = batch["past"]
+        else:
+            condition_input = {
+                key: torch.from_numpy(batch[key]).to(device=device, dtype=torch.float32)
+                for key in ["ego_past", "neighbor_past", "edge_attr", "neighbor_mask"]
+            }
+            past_for_plot = batch["ego_past"]
+        normalized_predictions = model.sample(condition_input, num_samples=num_samples).cpu().numpy()
         normalized_future = batch["future"]
         relative_predictions = decode_future(normalized_predictions, stats, data_config.future_representation)
         relative_future = decode_future(normalized_future, stats, data_config.future_representation)
@@ -76,10 +87,10 @@ def evaluate(
         future_xy = relative_future + batch["origin"][:, None, :]
         accumulator.update(trajectory_metrics(predictions_xy, future_xy))
 
-        for index in range(len(batch["past"])):
+        for index in range(len(past_for_plot)):
             if plotted >= num_plots:
                 break
-            relative_past_xy = invert_past_xy_normalization(batch["past"][index, :, :2], stats)
+            relative_past_xy = invert_past_xy_normalization(past_for_plot[index, :, :2], stats)
             past_xy = relative_past_xy + batch["origin"][index]
             meta = batch["meta"][index]
             plot_trajectory_prediction(
@@ -90,7 +101,7 @@ def evaluate(
                 title=f"{meta['scene_id']} track={meta['track_id']} frame={meta['obs_end_frame']}",
             )
             plotted += 1
-        processed += len(batch["past"])
+        processed += len(past_for_plot)
 
     report = {
         "checkpoint": str(checkpoint_path),
@@ -105,7 +116,7 @@ def evaluate(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate and visualize diffusion trajectory predictions.")
-    parser.add_argument("--config", type=Path, default=Path("configs/ngsim_diffusion.yaml"))
+    parser.add_argument("--config", type=Path, default=Path("configs/ngsim_leader_clean_diffusion.yaml"))
     parser.add_argument("--checkpoint", type=Path, default=Path("outputs/checkpoints/diffusion_best.pt"))
     parser.add_argument("--num-samples", type=int, default=6)
     parser.add_argument("--max-trajectories", type=int)

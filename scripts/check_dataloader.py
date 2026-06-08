@@ -21,6 +21,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-normalize", action="store_true")
     parser.add_argument("--absolute-xy", action="store_true")
     parser.add_argument("--future-representation", choices=["position", "delta"], default="position")
+    parser.add_argument("--dataset-type", choices=["trajectory", "graph"], default="trajectory")
     return parser.parse_args()
 
 
@@ -34,17 +35,25 @@ def main() -> None:
         relative_xy=not args.absolute_xy,
         future_representation=args.future_representation,
         stats_path=args.split_dir / f"{args.prefix}_stats.npz",
+        dataset_type=args.dataset_type,
     )
     loaders = build_dataloaders(config)
     summary = {}
     for split, loader in loaders.items():
         batch = next(iter(loader))
-        summary[split] = {
+        row = {
             "num_batches": len(loader),
-            "batch_past_shape": list(batch["past"].shape),
             "batch_future_shape": list(batch["future"].shape),
             "batch_origin_shape": list(batch["origin"].shape),
         }
+        if "past" in batch:
+            row["batch_past_shape"] = list(batch["past"].shape)
+        else:
+            row["batch_ego_past_shape"] = list(batch["ego_past"].shape)
+            row["batch_neighbor_past_shape"] = list(batch["neighbor_past"].shape)
+            row["batch_edge_attr_shape"] = list(batch["edge_attr"].shape)
+            row["batch_neighbor_mask_shape"] = list(batch["neighbor_mask"].shape)
+        summary[split] = row
     print(json.dumps(summary, indent=2, ensure_ascii=False))
 
 

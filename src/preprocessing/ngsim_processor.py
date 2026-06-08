@@ -9,7 +9,11 @@ from typing import Iterable
 import numpy as np
 import pandas as pd
 
-from src.preprocessing.ngsim_schema import NGSIM_COLUMNS, SOCIAL_EXTRA_COLUMNS, SOCIAL_NEIGHBOR_COLUMNS, STANDARD_COLUMNS
+from src.preprocessing.ngsim_schema import (
+    CLEAN_LEADER_FEATURE_COLUMNS,
+    NGSIM_COLUMNS,
+    STANDARD_COLUMNS,
+)
 
 
 @dataclass(frozen=True)
@@ -25,6 +29,12 @@ class NGSIMProcessConfig:
     min_track_len: int | None = None
     chunk_size: int = 10000
     location: str | None = None
+    min_leader_gap_m: float = 0.5
+    max_leader_gap_m: float = 150.0
+    max_leader_lateral_m: float = 4.0
+    max_leader_gap_headway_delta_m: float = 15.0
+    max_time_headway_s: float = 20.0
+    ttc_cap_s: float = 20.0
 
     @property
     def total_len(self) -> int:
@@ -118,66 +128,48 @@ def attach_explicit_leader_features(tracks: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def attach_social_neighbor_features(tracks: pd.DataFrame) -> pd.DataFrame:
+def clean_leader_features(tracks: pd.DataFrame, config: NGSIMProcessConfig) -> pd.DataFrame:
     tracks = tracks.copy()
-    social = pd.DataFrame(0.0, index=tracks.index, columns=SOCIAL_NEIGHBOR_COLUMNS)
-    group_cols = ["scene_id", "source_file", "frame"]
-    for _, frame_tracks in tracks.groupby(group_cols, sort=False):
-        _fill_frame_social_slots(frame_tracks, social)
-    return tracks.join(social[SOCIAL_EXTRA_COLUMNS])
+    exists = tracks["leader_exists"] > 0.5
+    valid = (
+        exists
+        & tracks["leader_dy"].between(config.min_leader_gap_m, config.max_leader_gap_m)
+        & (tracks["leader_dx"].abs() <= config.max_leader_lateral_m)
+    )
+    has_headway = tracks["space_headway"] > 0.0
+    consistent_headway = (~has_headway) | (
+        (tracks["leader_dy"] - tracks["space_headway"]).abs() <= config.max_leader_gap_headway_delta_m
+    )
+    valid &= consistent_headway
+
+    invalid = exists & ~valid
+    reset_cols = [
+        "leader_dx",
+        "leader_dy",
+        "leader_dvx",
+        "leader_dvy",
+        "leader_acc",
+        "space_headway",
+        "time_headway",
+    ]
+    tracks.loc[invalid, reset_cols] = 0.0
+    tracks.loc[invalid, "leader_exists"] = 0.0
+    tracks["time_headway"] = tracks["time_headway"].clip(lower=0.0, upper=config.max_time_headway_s)
+    return tracks
 
 
-def _fill_frame_social_slots(frame_tracks: pd.DataFrame, social: pd.DataFrame) -> None:
-    lanes = {
-        lane_id: lane.sort_values("y")
-        for lane_id, lane in frame_tracks.dropna(subset=["lane_id"]).groupby("lane_id", sort=False)
-    }
-    for lane_id, lane in lanes.items():
-        if len(lane) > 1:
-            _fill_social_slots_batch(social, lane.iloc[:-1], lane.iloc[1:], "leader")
-            _fill_social_slots_batch(social, lane.iloc[1:], lane.iloc[:-1], "follower")
-        _fill_adjacent_lane_slots(social, lane, lanes.get(lane_id - 1), "left")
-        _fill_adjacent_lane_slots(social, lane, lanes.get(lane_id + 1), "right")
-
-
-def _fill_adjacent_lane_slots(
-    social: pd.DataFrame,
-    ego_lane: pd.DataFrame,
-    neighbor_lane: pd.DataFrame | None,
-    side: str,
-) -> None:
-    if neighbor_lane is None or neighbor_lane.empty:
-        return
-    neighbor_y = neighbor_lane["y"].to_numpy()
-    ego_y = ego_lane["y"].to_numpy()
-    ahead_positions = np.searchsorted(neighbor_y, ego_y, side="right")
-    behind_positions = np.searchsorted(neighbor_y, ego_y, side="left") - 1
-    ahead_valid = ahead_positions < len(neighbor_lane)
-    behind_valid = behind_positions >= 0
-    if ahead_valid.any():
-        _fill_social_slots_batch(
-            social,
-            ego_lane.iloc[np.flatnonzero(ahead_valid)],
-            neighbor_lane.iloc[ahead_positions[ahead_valid]],
-            f"{side}_leader",
-        )
-    if behind_valid.any():
-        _fill_social_slots_batch(
-            social,
-            ego_lane.iloc[np.flatnonzero(behind_valid)],
-            neighbor_lane.iloc[behind_positions[behind_valid]],
-            f"{side}_follower",
-        )
-
-
-def _fill_social_slots_batch(social: pd.DataFrame, ego: pd.DataFrame, neighbor: pd.DataFrame, slot: str) -> None:
-    ego_index = ego.index
-    social.loc[ego_index, f"{slot}_dx"] = neighbor["x"].to_numpy() - ego["x"].to_numpy()
-    social.loc[ego_index, f"{slot}_dy"] = neighbor["y"].to_numpy() - ego["y"].to_numpy()
-    social.loc[ego_index, f"{slot}_dvx"] = neighbor["vx"].to_numpy() - ego["vx"].to_numpy()
-    social.loc[ego_index, f"{slot}_dvy"] = neighbor["vy"].to_numpy() - ego["vy"].to_numpy()
-    social.loc[ego_index, f"{slot}_acc"] = neighbor["acc"].fillna(0.0).to_numpy()
-    social.loc[ego_index, f"{slot}_exists"] = 1.0
+def attach_leader_derived_features(tracks: pd.DataFrame, config: NGSIMProcessConfig) -> pd.DataFrame:
+    tracks = tracks.copy()
+    exists = tracks["leader_exists"] > 0.5
+    gap = tracks["leader_dy"].where(exists, 0.0).clip(lower=0.0)
+    closing_speed = (-tracks["leader_dvy"]).where(exists, 0.0)
+    closing_for_ttc = closing_speed.where(closing_speed > 1e-3)
+    ttc = (gap / closing_for_ttc).replace([np.inf, -np.inf], np.nan)
+    tracks["leader_closing_speed"] = closing_speed
+    tracks["leader_ttc"] = ttc.fillna(config.ttc_cap_s).clip(lower=0.0, upper=config.ttc_cap_s)
+    tracks.loc[~exists, "leader_ttc"] = 0.0
+    tracks["leader_inverse_gap"] = np.where(exists & (gap > 1e-3), 1.0 / gap.clip(lower=1.0), 0.0)
+    return tracks
 
 
 def load_ngsim_file(path: Path, raw_dir: Path, config: NGSIMProcessConfig) -> pd.DataFrame:
@@ -254,7 +246,8 @@ def load_ngsim_file(path: Path, raw_dir: Path, config: NGSIMProcessConfig) -> pd
 
     out["preceding_exists"] = (out["preceding"].fillna(0) > 0).astype(np.float32)
     out = attach_explicit_leader_features(out)
-    out = attach_social_neighbor_features(out)
+    out = clean_leader_features(out, config)
+    out = attach_leader_derived_features(out, config)
     return out[STANDARD_COLUMNS]
 
 
@@ -310,27 +303,7 @@ def iter_track_windows(track: pd.DataFrame, total_len: int, stride: int) -> Iter
 
 def build_prediction_windows(tracks: pd.DataFrame, config: NGSIMProcessConfig) -> dict[str, np.ndarray]:
     past, future, meta_rows = [], [], []
-    feature_cols = [
-        "x",
-        "y",
-        "vx",
-        "vy",
-        "speed",
-        "acc",
-        "lane_id",
-        "vehicle_class",
-        "length",
-        "width",
-        "leader_dx",
-        "leader_dy",
-        "leader_dvx",
-        "leader_dvy",
-        "leader_acc",
-        "leader_exists",
-        "space_headway",
-        "time_headway",
-        *SOCIAL_EXTRA_COLUMNS,
-    ]
+    feature_cols = list(CLEAN_LEADER_FEATURE_COLUMNS)
     min_len = config.min_track_len or config.total_len
 
     group_cols = ["scene_id", "source_file", "track_id"]
@@ -413,12 +386,7 @@ def process_ngsim(config: NGSIMProcessConfig) -> dict:
             "Move or remove that directory before starting a new processing run."
         )
 
-    feature_cols = [
-        "x", "y", "vx", "vy", "speed", "acc", "lane_id", "vehicle_class",
-        "length", "width", "leader_dx", "leader_dy", "leader_dvx", "leader_dvy",
-        "leader_acc", "leader_exists", "space_headway", "time_headway",
-        *SOCIAL_EXTRA_COLUMNS,
-    ]
+    feature_cols = list(CLEAN_LEADER_FEATURE_COLUMNS)
     tracks_path = config.output_dir / "tracks.csv"
     skipped = []
     num_rows = 0
@@ -524,6 +492,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--keep-feet", action="store_true", help="Keep NGSIM distance units in feet.")
     parser.add_argument("--chunk-size", type=int, default=10000, help="Number of trajectory windows per output chunk.")
     parser.add_argument("--location", type=str, help="Only process one Location value, for example us-101 or i-80.")
+    parser.add_argument("--min-leader-gap-m", type=float, default=0.5)
+    parser.add_argument("--max-leader-gap-m", type=float, default=150.0)
+    parser.add_argument("--max-leader-lateral-m", type=float, default=4.0)
+    parser.add_argument("--max-leader-gap-headway-delta-m", type=float, default=15.0)
+    parser.add_argument("--max-time-headway-s", type=float, default=20.0)
+    parser.add_argument("--ttc-cap-s", type=float, default=20.0)
     return parser.parse_args()
 
 
@@ -540,6 +514,12 @@ def main() -> None:
         convert_feet_to_meters=not args.keep_feet,
         chunk_size=args.chunk_size,
         location=args.location,
+        min_leader_gap_m=args.min_leader_gap_m,
+        max_leader_gap_m=args.max_leader_gap_m,
+        max_leader_lateral_m=args.max_leader_lateral_m,
+        max_leader_gap_headway_delta_m=args.max_leader_gap_headway_delta_m,
+        max_time_headway_s=args.max_time_headway_s,
+        ttc_cap_s=args.ttc_cap_s,
     )
     metadata = process_ngsim(config)
     print(json.dumps(metadata, indent=2, ensure_ascii=False))

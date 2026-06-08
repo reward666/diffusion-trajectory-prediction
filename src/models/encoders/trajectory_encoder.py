@@ -52,6 +52,15 @@ class EgoLeaderEncoder(nn.Module):
             "space_headway",
             "time_headway",
         ]
+        optional_leader_feature_names = [
+            "leader_closing_speed",
+            "leader_ttc",
+            "leader_inverse_gap",
+        ]
+        available_features = set(self.feature_spec.feature_names)
+        self.leader_feature_names.extend(
+            name for name in optional_leader_feature_names if name in available_features
+        )
         self.ego_indices = self.feature_spec.indices(self.ego_feature_names)
         self.leader_indices = self.feature_spec.indices(self.leader_feature_names)
 

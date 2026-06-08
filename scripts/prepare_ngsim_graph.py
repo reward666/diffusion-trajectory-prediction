@@ -8,7 +8,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.evaluation.evaluate_scored_diffusion import main
+from src.preprocessing.ngsim_graph_processor import main
 
 
 if __name__ == "__main__":

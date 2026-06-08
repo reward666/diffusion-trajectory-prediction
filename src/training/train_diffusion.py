@@ -13,9 +13,7 @@ from torch.optim import AdamW
 from tqdm import tqdm
 
 from src.datasets.datamodule import DataConfig, build_dataloaders
-from src.datasets.normalization import load_stats
 from src.models.diffusion.trajectory_diffusion import TrajectoryDiffusion
-from src.preprocessing.ngsim_schema import SOCIAL_NEIGHBOR_SLOTS
 from src.training.checkpoint import load_checkpoint, save_checkpoint
 
 
@@ -53,6 +51,7 @@ def build_data_config(config: dict[str, Any]) -> DataConfig:
         normalize=bool(data["normalize"]),
         stats_path=Path(data["stats_path"]),
         future_representation=data.get("future_representation", "position"),
+        dataset_type=data.get("dataset_type", "trajectory"),
     )
 
 
@@ -60,45 +59,8 @@ def get_feature_names(loader) -> list[str]:
     return [str(name) for name in loader.dataset.feature_names.tolist()]
 
 
-def get_neighbor_exists_thresholds(config: dict[str, Any], feature_names: list[str]) -> list[float] | None:
-    if config["model"].get("encoder_type", "leader") != "social_attention":
-        return None
-    if not config["data"]["normalize"]:
-        return [0.0] * len(SOCIAL_NEIGHBOR_SLOTS)
-
-    stats = load_stats(config["data"]["stats_path"])
-    feature_index = {name: index for index, name in enumerate(feature_names)}
-    return [
-        float(-stats["past_mean"][feature_index[f"{slot}_exists"]] / stats["past_std"][feature_index[f"{slot}_exists"]])
-        for slot in SOCIAL_NEIGHBOR_SLOTS
-    ]
-
-
-def get_neighbor_position_stats(
-    config: dict[str, Any],
-    feature_names: list[str],
-) -> tuple[list[list[float]] | None, list[list[float]] | None]:
-    if config["model"].get("encoder_type", "leader") != "social_attention":
-        return None, None
-    if not config["data"]["normalize"]:
-        return None, None
-
-    stats = load_stats(config["data"]["stats_path"])
-    feature_index = {name: index for index, name in enumerate(feature_names)}
-    means = [
-        [float(stats["past_mean"][feature_index[f"{slot}_{axis}"]]) for axis in ["dx", "dy"]]
-        for slot in SOCIAL_NEIGHBOR_SLOTS
-    ]
-    stds = [
-        [float(stats["past_std"][feature_index[f"{slot}_{axis}"]]) for axis in ["dx", "dy"]]
-        for slot in SOCIAL_NEIGHBOR_SLOTS
-    ]
-    return means, stds
-
-
 def build_model(config: dict[str, Any], feature_names: list[str]) -> TrajectoryDiffusion:
     model = config["model"]
-    neighbor_position_means, neighbor_position_stds = get_neighbor_position_stats(config, feature_names)
     return TrajectoryDiffusion(
         feature_names=feature_names,
         pred_len=int(model["pred_len"]),
@@ -109,28 +71,33 @@ def build_model(config: dict[str, Any], feature_names: list[str]) -> TrajectoryD
         denoiser_num_layers=int(model["denoiser_num_layers"]),
         num_train_timesteps=int(model["num_train_timesteps"]),
         encoder_type=model.get("encoder_type", "leader"),
-        denoiser_type=model.get("denoiser_type", "temporal_cnn"),
-        neighbor_exists_thresholds=get_neighbor_exists_thresholds(config, feature_names),
-        neighbor_position_means=neighbor_position_means,
-        neighbor_position_stds=neighbor_position_stds,
-        use_slot_embedding=bool(model.get("use_slot_embedding", False)),
-        max_neighbor_distance_m=model.get("max_neighbor_distance_m"),
+        encoder_ego_hidden_dim=int(model.get("encoder_ego_hidden_dim", 128)),
+        encoder_leader_hidden_dim=int(model.get("encoder_leader_hidden_dim", 64)),
+        encoder_num_layers=int(model.get("encoder_num_layers", 1)),
+        encoder_dropout=float(model.get("encoder_dropout", 0.0)),
+        graph_node_dim=int(model.get("graph_node_dim", 6)),
+        graph_edge_dim=int(model.get("graph_edge_dim", 6)),
     )
 
 
-def batch_to_torch(batch: dict, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
-    past = torch.from_numpy(batch["past"]).to(device=device, dtype=torch.float32)
+def batch_to_torch(batch: dict, device: torch.device):
     future = torch.from_numpy(batch["future"]).to(device=device, dtype=torch.float32)
-    return past, future
+    if "past" in batch:
+        return torch.from_numpy(batch["past"]).to(device=device, dtype=torch.float32), future
+    condition = {
+        key: torch.from_numpy(batch[key]).to(device=device, dtype=torch.float32)
+        for key in ["ego_past", "neighbor_past", "edge_attr", "neighbor_mask"]
+    }
+    return condition, future
 
 
 def train_one_epoch(model, loader, optimizer, device: torch.device) -> float:
     model.train()
     losses = []
     for batch in tqdm(loader, desc="train", leave=False):
-        past, future = batch_to_torch(batch, device)
+        condition_input, future = batch_to_torch(batch, device)
         optimizer.zero_grad(set_to_none=True)
-        loss = model.training_loss(past, future)
+        loss = model.training_loss(condition_input, future)
         loss.backward()
         optimizer.step()
         losses.append(float(loss.detach().cpu()))
@@ -142,8 +109,8 @@ def validate(model, loader, device: torch.device) -> float:
     model.eval()
     losses = []
     for batch in tqdm(loader, desc="val", leave=False):
-        past, future = batch_to_torch(batch, device)
-        loss = model.training_loss(past, future)
+        condition_input, future = batch_to_torch(batch, device)
+        loss = model.training_loss(condition_input, future)
         losses.append(float(loss.detach().cpu()))
     return float(np.mean(losses))
 
@@ -216,7 +183,7 @@ def train(config: dict[str, Any]) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train the NGSIM trajectory diffusion model.")
-    parser.add_argument("--config", type=Path, default=Path("configs/ngsim_diffusion.yaml"))
+    parser.add_argument("--config", type=Path, default=Path("configs/ngsim_leader_clean_diffusion.yaml"))
     return parser.parse_args()
 
 

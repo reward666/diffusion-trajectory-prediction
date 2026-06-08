@@ -39,10 +39,12 @@ def find_sample_chunks(input_npz: Path) -> list[Path]:
 
 def load_samples(input_npz: Path) -> dict[str, np.ndarray]:
     data = np.load(input_npz, allow_pickle=False)
-    required = ["past", "future", "meta", "feature_names"]
+    required = ["future", "meta"]
     missing = [key for key in required if key not in data.files]
     if missing:
         raise ValueError(f"{input_npz} is missing arrays: {missing}")
+    if "past" not in data.files and "ego_past" not in data.files:
+        raise ValueError(f"{input_npz} must contain either 'past' or 'ego_past'.")
     return {key: data[key] for key in data.files}
 
 
@@ -84,7 +86,8 @@ def assign_groups(keys: np.ndarray, config: SplitConfig) -> dict[str, np.ndarray
 
 def subset_arrays(data: dict[str, np.ndarray], mask: np.ndarray) -> dict[str, np.ndarray]:
     subset = {}
-    n_samples = data["past"].shape[0]
+    sample_key = "past" if "past" in data else "ego_past"
+    n_samples = data[sample_key].shape[0]
     for key, value in data.items():
         if value.shape[:1] == (n_samples,):
             subset[key] = value[mask]
@@ -119,7 +122,8 @@ def save_split_chunks(
         print(f"[{chunk_index + 1}/{len(chunk_paths)}] splitting {chunk_path.name}", flush=True)
         data = load_samples(chunk_path)
         keys = get_group_keys(data["meta"])
-        num_samples += int(data["past"].shape[0])
+        sample_key = "past" if "past" in data else "ego_past"
+        num_samples += int(data[sample_key].shape[0])
         for split_name, split_groups in groups_by_split.items():
             mask = np.isin(keys, split_groups)
             if not mask.any():

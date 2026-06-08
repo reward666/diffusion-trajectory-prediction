@@ -6,6 +6,8 @@ from typing import Iterator
 
 import numpy as np
 
+from src.datasets.graph_normalization import compute_graph_normalization_stats, load_graph_stats, save_graph_stats
+from src.datasets.graph_npz import GraphTrajectoryNPZDataset
 from src.datasets.normalization import compute_normalization_stats, load_stats, save_stats
 from src.datasets.trajectory_npz import TrajectoryNPZDataset
 
@@ -21,15 +23,21 @@ class DataConfig:
     normalize: bool = True
     stats_path: Path = Path("data/splits/ngsim_stats.npz")
     future_representation: str = "position"
+    dataset_type: str = "trajectory"
 
 
 def collate_batch(items: list[dict]) -> dict:
-    return {
-        "past": np.stack([item["past"] for item in items]).astype(np.float32),
+    batch = {
         "future": np.stack([item["future"] for item in items]).astype(np.float32),
         "origin": np.stack([item["origin"] for item in items]).astype(np.float32),
         "meta": np.array([item["meta"] for item in items], dtype=items[0]["meta"].dtype),
     }
+    if "past" in items[0]:
+        batch["past"] = np.stack([item["past"] for item in items]).astype(np.float32)
+    else:
+        for key in ["ego_past", "neighbor_past", "edge_attr", "neighbor_mask"]:
+            batch[key] = np.stack([item[key] for item in items]).astype(np.float32)
+    return batch
 
 
 class NumpyDataLoader:
@@ -79,18 +87,23 @@ def get_or_create_stats(config: DataConfig) -> dict[str, np.ndarray] | None:
     if not config.normalize:
         return None
     if config.stats_path.exists():
-        stats = load_stats(config.stats_path)
+        stats = load_graph_stats(config.stats_path) if config.dataset_type == "graph" else load_stats(config.stats_path)
         if config.future_representation != "delta" or "future_delta_mean" in stats:
             return stats
-    stats = compute_normalization_stats(split_path(config, "train"))
-    save_stats(stats, config.stats_path)
+    if config.dataset_type == "graph":
+        stats = compute_graph_normalization_stats(split_path(config, "train"))
+        save_graph_stats(stats, config.stats_path)
+    else:
+        stats = compute_normalization_stats(split_path(config, "train"))
+        save_stats(stats, config.stats_path)
     return stats
 
 
 def build_datasets(config: DataConfig) -> dict[str, TrajectoryNPZDataset]:
     stats = get_or_create_stats(config)
+    dataset_cls = GraphTrajectoryNPZDataset if config.dataset_type == "graph" else TrajectoryNPZDataset
     return {
-        split: TrajectoryNPZDataset(
+        split: dataset_cls(
             split_path(config, split),
             relative_xy=config.relative_xy,
             normalize=config.normalize,

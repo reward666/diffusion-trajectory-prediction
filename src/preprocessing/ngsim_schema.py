@@ -28,28 +28,28 @@ class NGSIMColumns:
 
 NGSIM_COLUMNS = NGSIMColumns()
 
-SOCIAL_NEIGHBOR_SLOTS = [
-    "leader",
-    "follower",
-    "left_leader",
-    "left_follower",
-    "right_leader",
-    "right_follower",
-]
-
-SOCIAL_NEIGHBOR_ATTRIBUTES = ["dx", "dy", "dvx", "dvy", "acc", "exists"]
-
-SOCIAL_NEIGHBOR_COLUMNS = [
-    f"{slot}_{attribute}"
-    for slot in SOCIAL_NEIGHBOR_SLOTS
-    for attribute in SOCIAL_NEIGHBOR_ATTRIBUTES
-]
-
-SOCIAL_EXTRA_COLUMNS = [
-    f"{slot}_{attribute}"
-    for slot in SOCIAL_NEIGHBOR_SLOTS
-    if slot != "leader"
-    for attribute in SOCIAL_NEIGHBOR_ATTRIBUTES
+CLEAN_LEADER_FEATURE_COLUMNS = [
+    "x",
+    "y",
+    "vx",
+    "vy",
+    "speed",
+    "acc",
+    "lane_id",
+    "vehicle_class",
+    "length",
+    "width",
+    "leader_dx",
+    "leader_dy",
+    "leader_dvx",
+    "leader_dvy",
+    "leader_acc",
+    "leader_exists",
+    "space_headway",
+    "time_headway",
+    "leader_closing_speed",
+    "leader_ttc",
+    "leader_inverse_gap",
 ]
 
 STANDARD_COLUMNS = [
@@ -79,5 +79,7 @@ STANDARD_COLUMNS = [
     "following",
     "space_headway",
     "time_headway",
-    *SOCIAL_EXTRA_COLUMNS,
+    "leader_closing_speed",
+    "leader_ttc",
+    "leader_inverse_gap",
 ]

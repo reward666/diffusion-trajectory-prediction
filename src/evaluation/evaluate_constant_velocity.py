@@ -81,7 +81,7 @@ def evaluate(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate the constant-velocity baseline.")
-    parser.add_argument("--config", type=Path, default=Path("configs/ngsim_diffusion.yaml"))
+    parser.add_argument("--config", type=Path, default=Path("configs/ngsim_leader_clean_diffusion.yaml"))
     parser.add_argument("--fps", type=float, default=10.0)
     parser.add_argument("--velocity-window", type=int, default=5)
     parser.add_argument("--max-trajectories", type=int)
